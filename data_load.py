@@ -51,8 +51,15 @@ class ImageDataset(torch.utils.data.Dataset):
 
         if self.transform is not None:
             img = self.transform(img)
+            if self.mode == 'train':
+                self.random_erasing = transforms.RandomErasing(p=1.0, scale=(0.15, 0.25), ratio=(0.33, 3.3),
+                                                               value=random.random())
+                img_erasing = self.random_erasing(img)
+                img_last = torch.stack((img, img_erasing), dim=0)
+            else:
+                img_last = img
 
-        return img, label
+        return img_last, label
 
 
 class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
@@ -123,12 +130,12 @@ class DataLoad(nn.Module):
         train_labels_path = os.path.join(self.datasets_path, 'Annotated/train_labels.txt')
         train_dataset = labels_txt_load(train_labels_path)
         train_img_path = os.path.join(self.datasets_path, 'train')
-        train_set = ImageDataset(train_dataset, img_file_path=train_img_path, transform=data_transform['train'])
+        train_set = ImageDataset(train_dataset, img_file_path=train_img_path, transform=data_transform['train'], mode='train')
         # RAF数据集加载方式
-        train_loader = torch.utils.data.DataLoader(train_set, shuffle=True, batch_size=self.train_batch_size, num_workers=self.workers)
+        # train_loader = torch.utils.data.DataLoader(train_set, shuffle=True, batch_size=self.train_batch_size, num_workers=self.workers)
         # AffectNet数据集采用不平衡数据集加载方式
-        # train_loader = torch.utils.data.DataLoader(train_set, sampler=ImbalancedDatasetSampler(train_set),
-        #                                            batch_size=self.train_batch_size, num_workers=self.workers)
+        train_loader = torch.utils.data.DataLoader(train_set, sampler=ImbalancedDatasetSampler(train_set),
+                                                   batch_size=self.train_batch_size, num_workers=self.workers)
 
         return train_loader, len(train_dataset)
 
@@ -159,21 +166,3 @@ class DataLoad(nn.Module):
             val_loader, val_num = self.val_load()
             print("val number is {}.".format(val_num))
             return val_loader, val_num
-
-
-class DataErase(nn.Module):
-    def __init__(self, p=1.0, scale=(0.10, 0.25), ration=(0.4, 2.5)):
-        super(DataErase, self).__init__()
-        self.random_erasing = transforms.RandomErasing(p, scale, ration, value=random.random())
-
-    def forward(self, x):
-        img_origin = x
-        img_erasing = self.random_erasing(x)
-        img_result = torch.stack((img_origin, img_erasing), dim=1)
-        return img_result
-
-
-
-
-
-
